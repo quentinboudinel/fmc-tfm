@@ -8,12 +8,12 @@ def wave_packet_amplitude(t, a, t_e):
     """
     return a * (1 - np.cos(2*np.pi*t/t_e))
 
-def wave_packet(t, a=1, t_e=1, f=10):
+def wave_packet(t, a=1, t_e=0.000001, f=10000000):
     """Function for a wave packet emitted at time = 0.
     Params: - t is the time
             - a     maximum of the amplitude (default=1)
-            - t_e   time during which the packet is emitted (default=1s)
-            - f     frequency of the wave contained in the packet (default=10Hz)
+            - t_e   time during which the packet is emitted (default=100ns)
+            - f     frequency of the wave contained in the packet (default=1MHz)
     """
     if t>=0 and t<t_e:
         return wave_packet_amplitude(t, a, t_e) * np.cos(2*np.pi*f*t)
@@ -22,11 +22,7 @@ def wave_packet(t, a=1, t_e=1, f=10):
         return 0
 
 def main():
-    import matplotlib.pyplot as plt
-    T = np.linspace(-1, 2, 1000)
-    WP = np.array([wave_packet(t) for t in T])
-    plt.plot(T, WP)
-    plt.show()
+    pass
 
 if __name__=='__main__':
     main()
