@@ -1,2 +1,5 @@
 # ignore local env
 env
+
+# ignore precompiled files
+__pycache__

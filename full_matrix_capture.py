@@ -2,6 +2,8 @@ import numpy as np
 import signals as sg
 
 class Fmc:
+    """Full Matrix Capture class"""
+    
     DEFAULT = {
         "probes_number": 5,
         "probes_step": 0.001,
@@ -27,6 +29,16 @@ class Fmc:
         self.probes = [np.array([self.probes_step*(probe_number-(self.probes_number-1)/2), 0]) for probe_number in range(self.probes_number)]
 
     def capture(self, material):
+        """Capture all the data of a Full Matrix Capture
+        Parameters
+        ----------
+        material : Material class object
+            Material class object to scan.
+
+        Returns
+        -------
+        out : dict
+            Full Matrix Capture data."""
         samples_number = int(2*self.sampling_rate*self.scan_depth/material.celerity)
         T = np.linspace(0, 2*self.scan_depth/material.celerity, samples_number)
         full_matrix_capture = [[np.zeros(samples_number) \

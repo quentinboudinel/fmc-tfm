@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from material import Material
 from full_matrix_capture import Fmc
-from total_focusing_method import ppp_to_ppm, Tfm
+from total_focusing_method import ppi_to_ppm, Tfm
 
 class MaterialCelerityFrame(tk.Frame):
     def __init__(self, parent):
@@ -168,25 +168,25 @@ class FmcLabelFrame(tk.LabelFrame):
                                          defaultextension=".fmc") as data_file:
             pickle.dump(probe.capture(material), data_file)
 
-class ResolutionFrame(tk.Frame):
+class PixelDensityFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.resolution_double_var = tk.DoubleVar(self, value=10)
-        self.resolution_label = tk.Label(self, text="Resolution (ppp):")
-        self.resolution_label.pack(side=tk.LEFT)
-        self.resolution_entry = tk.Entry(self,
+        self.pixel_density_double_var = tk.DoubleVar(self, value=10)
+        self.pixel_density_label = tk.Label(self, text="Pixel density (ppi):")
+        self.pixel_density_label.pack(side=tk.LEFT)
+        self.pixel_density_entry = tk.Entry(self,
                                          textvariable=self
-                                                      .resolution_double_var)
-        self.resolution_entry.pack(side=tk.LEFT)
+                                                      .pixel_density_double_var)
+        self.pixel_density_entry.pack(side=tk.LEFT)
 
     def get(self):
-        return self.resolution_double_var.get()
+        return self.pixel_density_double_var.get()
 
 class TfmLabelFrame(tk.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent, text="Total Focusing Method")
-        self.resolution_frame = ResolutionFrame(self)
-        self.resolution_frame.pack(side=tk.TOP, fill=tk.BOTH)
+        self.pixel_density_frame = PixelDensityFrame(self)
+        self.pixel_density_frame.pack(side=tk.TOP, fill=tk.BOTH)
         self.browse_and_process_button = tk.Button(self,
                                                    text="Browse data & Process",
                                                    command=self.process)
@@ -197,7 +197,7 @@ class TfmLabelFrame(tk.LabelFrame):
 
     def process(self):
         with tk.filedialog.askopenfile(mode="rb") as data_file:
-            plt.imshow(Tfm(ppp_to_ppm(self.resolution_frame.get()))
+            plt.imshow(Tfm(ppi_to_ppm(self.pixel_density_frame.get()))
                        .process(pickle.load(data_file)))
             plt.show()
 
