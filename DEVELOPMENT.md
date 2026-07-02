@@ -57,6 +57,18 @@ cargo run --release
 
 ## Testing
 
+Rust's native test framework with `cargo test`. For TDD, use `cargo-watch` to auto-run tests on save:
+
 ```bash
-cargo test
+cargo test                     # Run all tests
+cargo test <name>              # Run tests matching name
+cargo watch -x test            # TDD: auto-run tests on file change
+cargo watch -x "test <name>"   # TDD: watch specific test
 ```
+
+Install cargo-watch: `cargo install cargo-watch`
+
+### Test Organization
+
+- **Unit tests**: In `src/*.rs` files, inside `#[cfg(test)]` modules
+- **Integration tests**: In `tests/` directory, each file is a separate test crate
