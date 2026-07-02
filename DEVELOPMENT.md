@@ -20,6 +20,18 @@ This project follows a **trunk-based development** approach with small, frequent
 - Each commit should be atomic and self-contained
 - No work-in-progress commits on `main`
 
+## Automated Releases
+
+This project uses [release-plz](https://release-plz.dev/) for automated versioning and releases based on conventional commits:
+
+- **Version bumps**: `feat:` → minor, `fix:` → patch, `BREAKING CHANGE` → major
+- **Changelog**: Auto-generated from commit messages
+- **GitHub releases**: Created automatically with git tags
+
+Configuration:
+- `.github/workflows/release-plz.yml` — CI workflow (runs in `rust:slim` container)
+- `release-plz.toml` — Release and changelog settings
+
 ## Development Phases
 
 ### Phase 1: Foundation

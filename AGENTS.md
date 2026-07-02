@@ -56,3 +56,7 @@ Trunk-based development on `main`. Each commit must compile and run. Conventiona
 - UI: ≥60 FPS idle, <16ms input latency
 
 May require SIMD, multi-threading, or GPU compute.
+
+## Agent Instructions
+
+- **Document changes**: When adding new tooling, CI workflows, or infrastructure, update the relevant documentation (DEVELOPMENT.md, README.md) in the same commit. Don't leave documentation for a follow-up.
