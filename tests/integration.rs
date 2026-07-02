@@ -1,6 +1,6 @@
-use fmc_tfm::add;
+use fmc_tfm::App;
 
 #[test]
-fn test_add() {
-    assert_eq!(add(1, 2), 3);
+fn app_can_be_instantiated() {
+    let _app = App::default();
 }
