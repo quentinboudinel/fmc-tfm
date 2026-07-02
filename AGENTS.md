@@ -59,4 +59,5 @@ May require SIMD, multi-threading, or GPU compute.
 
 ## Agent Instructions
 
+- **Test-Driven Development**: Always write tests before implementation. Follow the Red → Green → Refactor cycle. No feature or fix without a failing test first.
 - **Document changes**: When adding new tooling, CI workflows, or infrastructure, update the relevant documentation (DEVELOPMENT.md, README.md) in the same commit. Don't leave documentation for a follow-up.

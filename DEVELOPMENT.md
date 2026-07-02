@@ -8,10 +8,11 @@ This project follows a **trunk-based development** approach with small, frequent
 
 ## Principles
 
-1. **Small iterations** — Each commit introduces a single logical change
-2. **Always shippable** — `main` should always compile and run
-3. **Incremental delivery** — Features are built in thin vertical slices
-4. **Refactor as needed** — Improve structure when patterns emerge, not preemptively
+1. **Test-Driven Development** — Write tests first, then implementation. Red → Green → Refactor
+2. **Small iterations** — Each commit introduces a single logical change
+3. **Always shippable** — `main` should always compile and run
+4. **Incremental delivery** — Features are built in thin vertical slices
+5. **Refactor as needed** — Improve structure when patterns emerge, not preemptively
 
 ## Commit Guidelines
 
