@@ -1,0 +1,50 @@
+# Development Workflow
+
+> See also: [README](README.md) | [Specification](SPECIFICATION.md)
+
+## Philosophy
+
+This project follows a **trunk-based development** approach with small, frequent commits directly to `main`. Each commit represents a working state of the application.
+
+## Principles
+
+1. **Small iterations** — Each commit introduces a single logical change
+2. **Always shippable** — `main` should always compile and run
+3. **Incremental delivery** — Features are built in thin vertical slices
+4. **Refactor as needed** — Improve structure when patterns emerge, not preemptively
+
+## Commit Guidelines
+
+- Commit messages follow conventional format: `type: description`
+- Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
+- Each commit should be atomic and self-contained
+- No work-in-progress commits on `main`
+
+## Development Phases
+
+### Phase 1: Foundation
+Establish the basic application structure with egui, including window setup, canvas rendering, and basic interaction patterns.
+
+### Phase 2: Material & Defects
+Implement the material model, defect types, and canvas editing capabilities including undo/redo.
+
+### Phase 3: FMC Simulation
+Build the ray-based FMC simulation engine and HDF5 file output.
+
+### Phase 4: TFM Reconstruction
+Implement the Total Focusing Method algorithm with real-time performance and heatmap visualization.
+
+### Phase 5: Polish
+Add comparison view, file operations, image export, and documentation.
+
+## Build & Run
+
+```bash
+cargo run --release
+```
+
+## Testing
+
+```bash
+cargo test
+```
