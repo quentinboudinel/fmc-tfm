@@ -1,0 +1,10 @@
+[package]
+name = "fmc-tfm"
+version = "0.1.0"
+edition = "2024"
+description = "FMC ultrasonic simulation and TFM image reconstruction"
+license = "GPL-3.0-only"
+repository = "https://github.com/qmusic/fmc-tfm"
+authors = ["Quentin Boudinel <quentin.boudinel@atelier-26.net>"]
+
+[dependencies]
