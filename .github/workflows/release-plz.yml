@@ -34,6 +34,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # actions/checkout's own safe.directory fix-up only applies to its own
+      # post-job cleanup step inside this container job, not to later steps,
+      # so release-plz's git calls were failing with "detected dubious
+      # ownership in repository".
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Run release-plz
         uses: release-plz/action@v0.5
         env:
