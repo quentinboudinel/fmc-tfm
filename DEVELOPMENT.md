@@ -81,6 +81,23 @@ than implemented so far. The `#[ignore]`d `reconstruction_meets_performance_targ
 ### Phase 5: Polish
 Add comparison view, file operations, image export, and documentation.
 
+- **Project files** (`src/io/project_file.rs`): JSON with a `version` envelope around `Project`,
+  wired to Ctrl+S/Ctrl+O and Save/Open Project buttons.
+- **FMC file export/import** wired into the control panel: Export writes the last simulated
+  `FmcData`; Import reads a file, shows its metadata (SPECIFICATION.md 5.7.2), and only
+  reconstructs when the user clicks "Reconstruct" — errors (bad version, wrong shape, missing
+  file) are shown as a status message instead of panicking.
+- **PNG export** (`ui::export_png` in `src/ui/heatmap.rs`) reuses the heatmap's own
+  normalize/colormap pipeline (`render_pixels`), so the exported image matches what's on screen,
+  via the `image` crate.
+- **File dialogs** use `rfd` with its default (`xdg-portal`) backend — no GTK dependency needed.
+- **Comparison view pan/zoom sync** (SPECIFICATION.md 5.6): `Heatmap` doesn't own its own
+  zoom/pan; `App` passes `&mut self.canvas.zoom` / `&mut self.canvas.pan` into both `Canvas` and
+  `Heatmap`, so dragging or scrolling either panel updates the same shared state. This
+  deliberately duplicates `Canvas`'s small `pixels_per_mm`/`world_to_screen`/`screen_to_world`
+  formulas as free functions in `heatmap.rs` (parameterized instead of tied to a `Canvas`)
+  rather than refactoring `Canvas`'s already-tested API.
+
 ## Build & Run
 
 ```bash

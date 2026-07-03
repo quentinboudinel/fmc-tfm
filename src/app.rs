@@ -1,6 +1,6 @@
 use crate::core::{
-    AddDefect, CommandHistory, Defect, FmcSimulator, MaterialPreset, MoveDefect, PointReflector,
-    Project, RemoveDefect, TfmGrid, TfmImage, TfmReconstructor,
+    AddDefect, CommandHistory, Defect, FmcData, FmcSimulator, MaterialPreset, MoveDefect,
+    PointReflector, Project, RemoveDefect, TfmGrid, TfmImage, TfmReconstructor,
 };
 use crate::ui::{Canvas, Heatmap};
 use eframe::egui;
@@ -25,6 +25,14 @@ pub struct App {
     /// Bumped every time `tfm_image` is replaced, so `Heatmap` knows when it
     /// must rebuild its cached texture instead of reusing the last one.
     pub tfm_generation: u64,
+    /// FMC data from the last `run_simulation()`, kept around so "Export FMC"
+    /// doesn't need to re-simulate.
+    pub fmc_data: Option<FmcData>,
+    /// FMC data loaded via "Import FMC", shown (metadata first) before the
+    /// user chooses to reconstruct it, per SPECIFICATION.md 5.7.2.
+    pub imported_fmc: Option<FmcData>,
+    /// Last save/load/export/import outcome, shown in the control panel.
+    pub status_message: Option<String>,
     drag_start_pos: Option<(f64, f64)>,
 }
 
@@ -44,6 +52,9 @@ impl Default for App {
             heatmap: Heatmap::default(),
             tfm_image: None,
             tfm_generation: 0,
+            fmc_data: None,
+            imported_fmc: None,
+            status_message: None,
             drag_start_pos: None,
         }
     }
@@ -51,6 +62,8 @@ impl Default for App {
 
 impl App {
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        let mut save = false;
+        let mut open = false;
         ctx.input(|i| {
             if i.modifiers.ctrl && i.key_pressed(egui::Key::Z) {
                 if i.modifiers.shift {
@@ -75,7 +88,19 @@ impl App {
                 self.tool_mode = ToolMode::Select;
                 self.selected_defect = None;
             }
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
+                save = true;
+            }
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::O) {
+                open = true;
+            }
         });
+        if save {
+            self.save_project_dialog();
+        }
+        if open {
+            self.open_project_dialog();
+        }
     }
 
     fn defect_at_position(&self, x: f64, y: f64, tolerance: f64) -> Option<usize> {
@@ -87,6 +112,45 @@ impl App {
             }
         }
         None
+    }
+
+    fn save_project_dialog(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Project", &["json"])
+            .set_file_name("project.json")
+            .save_file()
+        else {
+            return;
+        };
+        self.status_message = Some(match crate::io::save_project(&path, &self.project) {
+            Ok(()) => format!("Saved project to {}", path.display()),
+            Err(e) => format!("Failed to save project: {e}"),
+        });
+    }
+
+    fn open_project_dialog(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Project", &["json"])
+            .pick_file()
+        else {
+            return;
+        };
+        match crate::io::load_project(&path) {
+            Ok(project) => {
+                self.canvas = Canvas::new(
+                    project.material.width_mm as f32,
+                    project.material.depth_mm as f32,
+                );
+                self.project = project;
+                self.history = CommandHistory::default();
+                self.selected_defect = None;
+                self.tfm_image = None;
+                self.status_message = Some(format!("Loaded project from {}", path.display()));
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Failed to load project: {e}"));
+            }
+        }
     }
 
     /// Runs the FMC simulation over the current project, then reconstructs a
@@ -101,6 +165,83 @@ impl App {
         let grid = TfmGrid::from_fmc(&fmc);
         self.tfm_image = Some(TfmReconstructor::reconstruct(&fmc, grid));
         self.tfm_generation += 1;
+        self.fmc_data = Some(fmc);
+    }
+
+    fn export_fmc_dialog(&mut self) {
+        let Some(fmc) = &self.fmc_data else {
+            self.status_message = Some("Run Simulate before exporting FMC data.".to_string());
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("FMC data", &["h5"])
+            .set_file_name("fmc_data.h5")
+            .save_file()
+        else {
+            return;
+        };
+        self.status_message = Some(match crate::io::write_fmc_file(&path, fmc) {
+            Ok(()) => format!("Exported FMC data to {}", path.display()),
+            Err(e) => format!("Failed to export FMC data: {e}"),
+        });
+    }
+
+    fn import_fmc_dialog(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("FMC data", &["h5"])
+            .pick_file()
+        else {
+            return;
+        };
+        match crate::io::read_fmc_file(&path) {
+            Ok(fmc) => {
+                self.status_message = Some(format!(
+                    "Loaded {} ({} elements, {} samples @ {:.1} MHz). Review metadata, then reconstruct.",
+                    path.display(),
+                    fmc.metadata.num_elements,
+                    fmc.metadata.num_samples,
+                    fmc.metadata.sample_rate_mhz,
+                ));
+                self.imported_fmc = Some(fmc);
+            }
+            Err(e) => {
+                self.imported_fmc = None;
+                self.status_message = Some(format!("Failed to import FMC data: {e}"));
+            }
+        }
+    }
+
+    fn reconstruct_imported_fmc(&mut self) {
+        if let Some(fmc) = &self.imported_fmc {
+            let grid = TfmGrid::from_fmc(fmc);
+            self.tfm_image = Some(TfmReconstructor::reconstruct(fmc, grid));
+            self.tfm_generation += 1;
+        }
+    }
+
+    fn export_png_dialog(&mut self) {
+        let Some(tfm_image) = &self.tfm_image else {
+            self.status_message = Some("Run Simulate before exporting an image.".to_string());
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("PNG image", &["png"])
+            .set_file_name("reconstruction.png")
+            .save_file()
+        else {
+            return;
+        };
+        let result = crate::ui::export_png(
+            &path,
+            tfm_image,
+            self.heatmap.dynamic_range_db,
+            self.heatmap.gain_db,
+            self.heatmap.colormap,
+        );
+        self.status_message = Some(match result {
+            Ok(()) => format!("Exported reconstruction image to {}", path.display()),
+            Err(e) => format!("Failed to export image: {e}"),
+        });
     }
 }
 
@@ -113,6 +254,56 @@ impl eframe::App for App {
             .show(ctx, |ui| {
                 ui.heading("FMC-TFM");
                 ui.separator();
+
+                egui::CollapsingHeader::new("File")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("Save Project").clicked() {
+                                self.save_project_dialog();
+                            }
+                            if ui.button("Open Project").clicked() {
+                                self.open_project_dialog();
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            if ui.button("Export FMC").clicked() {
+                                self.export_fmc_dialog();
+                            }
+                            if ui.button("Import FMC").clicked() {
+                                self.import_fmc_dialog();
+                            }
+                        });
+                        if let Some(fmc) = &self.imported_fmc {
+                            let metadata = fmc.metadata.clone();
+                            let mut reconstruct_clicked = false;
+                            ui.group(|ui| {
+                                ui.label("Imported FMC metadata:");
+                                ui.label(format!("Elements: {}", metadata.num_elements));
+                                ui.label(format!("Pitch: {:.2} mm", metadata.pitch_mm));
+                                ui.label(format!(
+                                    "Frequency: {:.1} MHz",
+                                    metadata.center_frequency_mhz
+                                ));
+                                ui.label(format!(
+                                    "Sample rate: {:.1} MHz, {} samples",
+                                    metadata.sample_rate_mhz, metadata.num_samples
+                                ));
+                                ui.label(format!(
+                                    "Material: {:.0} m/s, {:.0}x{:.0} mm",
+                                    metadata.material_velocity_mps,
+                                    metadata.material_width_mm,
+                                    metadata.material_depth_mm
+                                ));
+                                if ui.button("Reconstruct").clicked() {
+                                    reconstruct_clicked = true;
+                                }
+                            });
+                            if reconstruct_clicked {
+                                self.reconstruct_imported_fmc();
+                            }
+                        }
+                    });
 
                 egui::CollapsingHeader::new("Material")
                     .default_open(true)
@@ -141,9 +332,14 @@ impl eframe::App for App {
                 egui::CollapsingHeader::new("Reconstruction")
                     .default_open(true)
                     .show(ui, |ui| {
-                        if ui.button("Simulate").clicked() {
-                            self.run_simulation();
-                        }
+                        ui.horizontal(|ui| {
+                            if ui.button("Simulate").clicked() {
+                                self.run_simulation();
+                            }
+                            if ui.button("Export PNG").clicked() {
+                                self.export_png_dialog();
+                            }
+                        });
                         self.heatmap.show_controls(ui);
                     });
 
@@ -157,6 +353,11 @@ impl eframe::App for App {
                         .clicked()
                         .then(|| self.history.redo(&mut self.project));
                 });
+
+                if let Some(message) = &self.status_message {
+                    ui.separator();
+                    ui.label(message);
+                }
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -170,6 +371,8 @@ impl eframe::App for App {
                     &mut columns[1],
                     self.tfm_image.as_ref(),
                     self.tfm_generation,
+                    &mut self.canvas.zoom,
+                    &mut self.canvas.pan,
                 );
             });
         });

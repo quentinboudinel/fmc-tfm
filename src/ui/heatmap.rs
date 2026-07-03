@@ -1,3 +1,6 @@
+use std::fmt;
+use std::path::Path;
+
 use crate::core::TfmImage;
 use eframe::egui::{self, Color32, Pos2, Rect};
 
@@ -87,13 +90,21 @@ impl Heatmap {
     /// 5.5.3. `generation` should change whenever `image` is replaced with a
     /// new reconstruction, so the display texture is only rebuilt when the
     /// data or display parameters actually change.
+    ///
+    /// `zoom`/`pan` are shared with `Canvas` (SPECIFICATION.md 5.6: views
+    /// should be synchronized for pan/zoom) — passing the same state in from
+    /// both panels keeps them in lockstep regardless of which one is dragged
+    /// or scrolled.
     pub fn show_image(
         &mut self,
         ui: &mut egui::Ui,
         image: Option<&TfmImage>,
         generation: u64,
+        zoom: &mut f32,
+        pan: &mut egui::Vec2,
     ) -> egui::Response {
-        let (response, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::hover());
+        let (response, painter) =
+            ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = response.rect;
 
         let bg_color = ui.visuals().extreme_bg_color;
@@ -110,10 +121,22 @@ impl Heatmap {
             return response;
         };
 
+        let width_mm = image.grid.width_mm as f32;
+        let depth_mm = image.grid.depth_mm as f32;
+        handle_pan_zoom(&response, rect, width_mm, depth_mm, zoom, pan);
+
         self.ensure_texture(ui.ctx(), image, generation);
         if let Some(texture) = &self.texture {
-            let aspect = image.grid.width_mm / image.grid.depth_mm;
-            let image_rect = fit_aspect(rect, aspect as f32);
+            let top_left = world_to_screen(Pos2::ZERO, rect, width_mm, depth_mm, *zoom, *pan);
+            let bottom_right = world_to_screen(
+                Pos2::new(width_mm, depth_mm),
+                rect,
+                width_mm,
+                depth_mm,
+                *zoom,
+                *pan,
+            );
+            let image_rect = Rect::from_two_pos(top_left, bottom_right);
             painter.image(
                 texture.id(),
                 image_rect,
@@ -136,17 +159,8 @@ impl Heatmap {
             return;
         }
 
-        let max_abs = image.max_abs();
-        let width = image.grid.res_x;
-        let height = image.grid.res_z;
-        let mut pixels = Vec::with_capacity(width * height);
-        for iz in 0..height {
-            for ix in 0..width {
-                let amp = image.get(ix, iz);
-                let t = normalize(amp, max_abs, self.dynamic_range_db, self.gain_db);
-                pixels.push(self.colormap.apply(t));
-            }
-        }
+        let (width, height, pixels) =
+            render_pixels(image, self.dynamic_range_db, self.gain_db, self.colormap);
         let color_image = egui::ColorImage {
             size: [width, height],
             pixels,
@@ -157,14 +171,140 @@ impl Heatmap {
     }
 }
 
-fn fit_aspect(rect: Rect, aspect: f32) -> Rect {
-    let available_aspect = rect.width() / rect.height();
-    let (w, h) = if available_aspect > aspect {
-        (rect.height() * aspect, rect.height())
-    } else {
-        (rect.width(), rect.width() / aspect)
-    };
-    Rect::from_center_size(rect.center(), egui::Vec2::new(w, h))
+/// Renders every pixel of `image` through the normalize/colormap pipeline,
+/// shared between the live texture (`Heatmap::ensure_texture`) and PNG export.
+fn render_pixels(
+    image: &TfmImage,
+    dynamic_range_db: f32,
+    gain_db: f32,
+    colormap: Colormap,
+) -> (usize, usize, Vec<Color32>) {
+    let max_abs = image.max_abs();
+    let width = image.grid.res_x;
+    let height = image.grid.res_z;
+    let mut pixels = Vec::with_capacity(width * height);
+    for iz in 0..height {
+        for ix in 0..width {
+            let amp = image.get(ix, iz);
+            let t = normalize(amp, max_abs, dynamic_range_db, gain_db);
+            pixels.push(colormap.apply(t));
+        }
+    }
+    (width, height, pixels)
+}
+
+#[derive(Debug)]
+pub enum PngExportError {
+    InvalidDimensions,
+    Encode(image::ImageError),
+}
+
+impl fmt::Display for PngExportError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PngExportError::InvalidDimensions => write!(f, "invalid image dimensions"),
+            PngExportError::Encode(e) => write!(f, "PNG encode error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for PngExportError {}
+
+impl From<image::ImageError> for PngExportError {
+    fn from(e: image::ImageError) -> Self {
+        PngExportError::Encode(e)
+    }
+}
+
+/// Renders `tfm_image` through the same normalize/colormap pipeline as the
+/// live heatmap and saves it as a PNG, per SPECIFICATION.md 5.7.3.
+pub fn export_png<P: AsRef<Path>>(
+    path: P,
+    tfm_image: &TfmImage,
+    dynamic_range_db: f32,
+    gain_db: f32,
+    colormap: Colormap,
+) -> Result<(), PngExportError> {
+    let (width, height, pixels) = render_pixels(tfm_image, dynamic_range_db, gain_db, colormap);
+    let mut buf = Vec::with_capacity(width * height * 3);
+    for color in pixels {
+        buf.push(color.r());
+        buf.push(color.g());
+        buf.push(color.b());
+    }
+    let img = image::RgbImage::from_raw(width as u32, height as u32, buf)
+        .ok_or(PngExportError::InvalidDimensions)?;
+    img.save(path)?;
+    Ok(())
+}
+
+const ZOOM_MIN: f32 = 0.1;
+const ZOOM_MAX: f32 = 10.0;
+const ZOOM_SPEED: f32 = 0.001;
+
+/// Same shape as `Canvas::pixels_per_mm`/`world_to_screen`/`screen_to_world`,
+/// parameterized instead of tied to a `Canvas` instance, so the heatmap can
+/// share the exact same zoom/pan behavior without depending on `Canvas`.
+fn pixels_per_mm(rect: Rect, width_mm: f32, depth_mm: f32) -> f32 {
+    (rect.width() / width_mm).min(rect.height() / depth_mm)
+}
+
+fn world_to_screen(
+    world: Pos2,
+    rect: Rect,
+    width_mm: f32,
+    depth_mm: f32,
+    zoom: f32,
+    pan: egui::Vec2,
+) -> Pos2 {
+    let scale = pixels_per_mm(rect, width_mm, depth_mm);
+    Pos2::new(
+        rect.left() + world.x * scale * zoom + pan.x,
+        rect.top() + world.y * scale * zoom + pan.y,
+    )
+}
+
+fn screen_to_world(
+    screen: Pos2,
+    rect: Rect,
+    width_mm: f32,
+    depth_mm: f32,
+    zoom: f32,
+    pan: egui::Vec2,
+) -> Pos2 {
+    let scale = pixels_per_mm(rect, width_mm, depth_mm);
+    Pos2::new(
+        (screen.x - rect.left() - pan.x) / (scale * zoom),
+        (screen.y - rect.top() - pan.y) / (scale * zoom),
+    )
+}
+
+fn handle_pan_zoom(
+    response: &egui::Response,
+    rect: Rect,
+    width_mm: f32,
+    depth_mm: f32,
+    zoom: &mut f32,
+    pan: &mut egui::Vec2,
+) {
+    if response.dragged_by(egui::PointerButton::Middle) {
+        *pan += response.drag_delta();
+    }
+
+    if response.hovered() {
+        let scroll = response.ctx.input(|i| i.raw_scroll_delta.y);
+        if scroll != 0.0 {
+            if let Some(pointer) = response.ctx.input(|i| i.pointer.hover_pos()) {
+                let world_before = screen_to_world(pointer, rect, width_mm, depth_mm, *zoom, *pan);
+                let zoom_delta = scroll * ZOOM_SPEED * *zoom;
+                *zoom = (*zoom + zoom_delta).clamp(ZOOM_MIN, ZOOM_MAX);
+                let world_after = screen_to_world(pointer, rect, width_mm, depth_mm, *zoom, *pan);
+                let scale = pixels_per_mm(rect, width_mm, depth_mm) * *zoom;
+                pan.x += (world_after.x - world_before.x) * scale;
+                pan.y += (world_after.y - world_before.y) * scale;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -234,11 +374,78 @@ mod tests {
     }
 
     #[test]
-    fn fit_aspect_preserves_wide_grid_within_tall_rect() {
-        let rect = Rect::from_min_size(Pos2::ZERO, egui::Vec2::new(200.0, 200.0));
-        let fitted = fit_aspect(rect, 2.0);
-        assert!((fitted.width() / fitted.height() - 2.0).abs() < 1e-4);
-        assert!(fitted.width() <= rect.width() + 1e-4);
-        assert!(fitted.height() <= rect.height() + 1e-4);
+    fn world_origin_maps_to_screen_topleft() {
+        let rect = Rect::from_min_size(Pos2::new(100.0, 50.0), egui::Vec2::new(400.0, 200.0));
+        let screen = world_to_screen(Pos2::ZERO, rect, 100.0, 50.0, 1.0, egui::Vec2::ZERO);
+        assert_eq!(screen.x, rect.left());
+        assert_eq!(screen.y, rect.top());
+    }
+
+    #[test]
+    fn screen_to_world_roundtrip() {
+        let rect = Rect::from_min_size(Pos2::new(100.0, 50.0), egui::Vec2::new(400.0, 200.0));
+        let world = Pos2::new(25.0, 12.5);
+        let screen = world_to_screen(world, rect, 100.0, 50.0, 1.5, egui::Vec2::new(10.0, -5.0));
+        let back = screen_to_world(screen, rect, 100.0, 50.0, 1.5, egui::Vec2::new(10.0, -5.0));
+        assert!((back.x - world.x).abs() < 0.001);
+        assert!((back.y - world.y).abs() < 0.001);
+    }
+
+    #[test]
+    fn zoom_scales_distance_from_origin() {
+        let rect = Rect::from_min_size(Pos2::new(100.0, 50.0), egui::Vec2::new(400.0, 200.0));
+        let world = Pos2::new(10.0, 10.0);
+        let at_1x = world_to_screen(world, rect, 100.0, 50.0, 1.0, egui::Vec2::ZERO);
+        let at_2x = world_to_screen(world, rect, 100.0, 50.0, 2.0, egui::Vec2::ZERO);
+        let d1 = at_1x.x - rect.left();
+        let d2 = at_2x.x - rect.left();
+        assert!((d2 - d1 * 2.0).abs() < 0.001);
+    }
+
+    fn sample_tfm_image() -> TfmImage {
+        use crate::core::TfmGrid;
+        let grid = TfmGrid::new(10.0, 10.0, 4, 3);
+        let values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0];
+        TfmImage::new(grid, values)
+    }
+
+    fn temp_png_path(name: &str) -> std::path::PathBuf {
+        tempfile::Builder::new()
+            .prefix(name)
+            .suffix(".png")
+            .tempfile()
+            .unwrap()
+            .into_temp_path()
+            .to_path_buf()
+    }
+
+    #[test]
+    fn export_png_writes_readable_file_with_matching_dimensions() {
+        let path = temp_png_path("heatmap_export");
+        let tfm_image = sample_tfm_image();
+
+        export_png(&path, &tfm_image, 40.0, 0.0, Colormap::Thermal).unwrap();
+
+        let decoded = image::open(&path).unwrap();
+        assert_eq!(decoded.width(), 4);
+        assert_eq!(decoded.height(), 3);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn export_png_brightest_pixel_matches_colormap_peak() {
+        let path = temp_png_path("heatmap_export_peak");
+        let tfm_image = sample_tfm_image();
+
+        export_png(&path, &tfm_image, 40.0, 0.0, Colormap::Grayscale).unwrap();
+
+        let decoded = image::open(&path).unwrap().to_rgb8();
+        // The last value (11.0) is the image's max_abs, so it should map to
+        // full-scale white under the grayscale colormap.
+        let brightest = decoded.get_pixel(3, 2);
+        assert_eq!(*brightest, image::Rgb([255, 255, 255]));
+
+        std::fs::remove_file(&path).ok();
     }
 }
