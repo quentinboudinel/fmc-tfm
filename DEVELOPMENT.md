@@ -44,6 +44,13 @@ Implement the material model, defect types, and canvas editing capabilities incl
 ### Phase 3: FMC Simulation
 Build the ray-based FMC simulation engine and HDF5 file output.
 
+HDF5 I/O uses the [`hdf5-pure`](https://crates.io/crates/hdf5-pure) crate rather than the
+`hdf5`/`hdf5-metno` bindings: it's a pure-Rust reader/writer with no dependency on the system
+`libhdf5` C library, so builds don't need it installed or vendored. It normalizes integer
+attributes to `I64` on read regardless of the width they were written with (see
+`src/io/fmc_file.rs`), and scalar float metadata is stored as `F64` since the crate has no `F32`
+attribute variant — only the `fmc_data` dataset itself is stored as `float32`, per the spec.
+
 ### Phase 4: TFM Reconstruction
 Implement the Total Focusing Method algorithm with real-time performance and heatmap visualization.
 

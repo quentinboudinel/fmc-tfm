@@ -501,6 +501,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "byteorder-lite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1080,8 +1086,10 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui",
+ "hdf5-pure",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1425,6 +1433,16 @@ dependencies = [
  "thiserror 1.0.69",
  "widestring",
  "winapi",
+]
+
+[[package]]
+name = "hdf5-pure"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20fde04379b9932a190ff9c402d904b378dce9797ab567df09d9724f1afe3b74"
+dependencies = [
+ "byteorder",
+ "flate2",
 ]
 
 [[package]]
