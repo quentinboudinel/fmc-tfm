@@ -5,6 +5,13 @@ use crate::core::{
 use crate::ui::{Canvas, Heatmap};
 use eframe::egui;
 
+/// Click-selection tolerance and minimum separation between defects, in mm.
+const MIN_DEFECT_SEPARATION_MM: f64 = 3.0;
+
+/// Cracks and voids are allowed to overlap; only a same-type placement
+/// this close (effectively the same click) counts as a duplicate.
+const IDENTICAL_POSITION_TOLERANCE_MM: f64 = 1e-6;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToolMode {
     #[default]
@@ -112,6 +119,82 @@ impl App {
             }
         }
         None
+    }
+
+    /// A new point closer than this to an existing defect is rejected as
+    /// overlapping; matches the click-selection tolerance so "close enough
+    /// to select" and "close enough to collide" agree.
+    fn can_place_point_at(&self, x: f64, y: f64) -> bool {
+        self.defect_at_position(x, y, MIN_DEFECT_SEPARATION_MM)
+            .is_none()
+    }
+
+    /// Adds a point reflector at (x, y), unless it would overlap an existing
+    /// defect, in which case it's rejected with a status message instead.
+    fn try_add_point(&mut self, x: f64, y: f64) {
+        if !self.can_place_point_at(x, y) {
+            self.status_message =
+                Some("Cannot place point: overlaps an existing defect.".to_string());
+            return;
+        }
+        let defect = Defect::PointReflector(PointReflector {
+            x,
+            y,
+            amplitude: 1.0,
+        });
+        let cmd = AddDefect::new(defect);
+        self.history.execute(Box::new(cmd), &mut self.project);
+    }
+
+    /// True if an existing defect matched by `same_variant` sits at (x, y),
+    /// within floating-point noise. Unlike point placement, cracks and voids
+    /// are allowed to overlap freely — only a literal duplicate (same type,
+    /// same click position) is rejected.
+    fn has_identical_defect_at(
+        &self,
+        x: f64,
+        y: f64,
+        same_variant: impl Fn(&Defect) -> bool,
+    ) -> bool {
+        self.project.defects.iter().any(|d| {
+            same_variant(d) && {
+                let (dx, dy) = d.position();
+                ((x - dx).powi(2) + (y - dy).powi(2)).sqrt() < IDENTICAL_POSITION_TOLERANCE_MM
+            }
+        })
+    }
+
+    fn try_add_crack(&mut self, x: f64, y: f64) {
+        if self.has_identical_defect_at(x, y, |d| matches!(d, Defect::Crack(_))) {
+            self.status_message =
+                Some("Cannot place crack: identical to an existing defect.".to_string());
+            return;
+        }
+        let defect = Defect::Crack(crate::core::Crack {
+            x,
+            y,
+            length: 5.0,
+            angle: 0.0,
+            amplitude: 1.0,
+        });
+        let cmd = AddDefect::new(defect);
+        self.history.execute(Box::new(cmd), &mut self.project);
+    }
+
+    fn try_add_void(&mut self, x: f64, y: f64) {
+        if self.has_identical_defect_at(x, y, |d| matches!(d, Defect::Void(_))) {
+            self.status_message =
+                Some("Cannot place void: identical to an existing defect.".to_string());
+            return;
+        }
+        let defect = Defect::Void(crate::core::Void {
+            x,
+            y,
+            radius: 2.0,
+            amplitude: 1.0,
+        });
+        let cmd = AddDefect::new(defect);
+        self.history.execute(Box::new(cmd), &mut self.project);
     }
 
     fn save_project_dialog(&mut self) {
@@ -510,37 +593,17 @@ impl App {
 
                 match self.tool_mode {
                     ToolMode::Select => {
-                        self.selected_defect = self.defect_at_position(x, y, 3.0);
+                        self.selected_defect =
+                            self.defect_at_position(x, y, MIN_DEFECT_SEPARATION_MM);
                     }
                     ToolMode::AddPoint => {
-                        let defect = Defect::PointReflector(PointReflector {
-                            x,
-                            y,
-                            amplitude: 1.0,
-                        });
-                        let cmd = AddDefect::new(defect);
-                        self.history.execute(Box::new(cmd), &mut self.project);
+                        self.try_add_point(x, y);
                     }
                     ToolMode::AddCrack => {
-                        let defect = Defect::Crack(crate::core::Crack {
-                            x,
-                            y,
-                            length: 5.0,
-                            angle: 0.0,
-                            amplitude: 1.0,
-                        });
-                        let cmd = AddDefect::new(defect);
-                        self.history.execute(Box::new(cmd), &mut self.project);
+                        self.try_add_crack(x, y);
                     }
                     ToolMode::AddVoid => {
-                        let defect = Defect::Void(crate::core::Void {
-                            x,
-                            y,
-                            radius: 2.0,
-                            amplitude: 1.0,
-                        });
-                        let cmd = AddDefect::new(defect);
-                        self.history.execute(Box::new(cmd), &mut self.project);
+                        self.try_add_void(x, y);
                     }
                 }
             }
@@ -550,8 +613,11 @@ impl App {
             if response.drag_started_by(egui::PointerButton::Primary) {
                 if let Some(pos) = response.interact_pointer_pos() {
                     let world = self.canvas.screen_to_world(pos, rect);
-                    if let Some(idx) = self.defect_at_position(world.x as f64, world.y as f64, 3.0)
-                    {
+                    if let Some(idx) = self.defect_at_position(
+                        world.x as f64,
+                        world.y as f64,
+                        MIN_DEFECT_SEPARATION_MM,
+                    ) {
                         self.selected_defect = Some(idx);
                         self.drag_start_pos = Some(self.project.defects[idx].position());
                     }
@@ -615,6 +681,169 @@ mod tests {
         assert_eq!(app.defect_at_position(10.0, 20.0, 3.0), Some(0));
         assert_eq!(app.defect_at_position(11.0, 20.0, 3.0), Some(0));
         assert_eq!(app.defect_at_position(50.0, 50.0, 3.0), None);
+    }
+
+    #[test]
+    fn can_place_point_when_no_defects_exist() {
+        let app = App::default();
+        assert!(app.can_place_point_at(10.0, 20.0));
+    }
+
+    #[test]
+    fn cannot_place_point_overlapping_existing_defect() {
+        let mut app = App::default();
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 10.0,
+                y: 20.0,
+                amplitude: 1.0,
+            }));
+
+        assert!(!app.can_place_point_at(10.0, 20.0));
+        assert!(!app.can_place_point_at(11.0, 20.0));
+    }
+
+    #[test]
+    fn can_place_point_far_from_existing_defect() {
+        let mut app = App::default();
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 10.0,
+                y: 20.0,
+                amplitude: 1.0,
+            }));
+
+        assert!(app.can_place_point_at(50.0, 50.0));
+    }
+
+    #[test]
+    fn adding_overlapping_point_via_canvas_click_is_a_no_op() {
+        let mut app = App::default();
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 10.0,
+                y: 20.0,
+                amplitude: 1.0,
+            }));
+
+        app.try_add_point(10.5, 20.5);
+
+        assert_eq!(
+            app.project.defects.len(),
+            1,
+            "overlapping point should not be added"
+        );
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn adding_non_overlapping_point_via_canvas_click_succeeds() {
+        let mut app = App::default();
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 10.0,
+                y: 20.0,
+                amplitude: 1.0,
+            }));
+
+        app.try_add_point(80.0, 40.0);
+
+        assert_eq!(app.project.defects.len(), 2);
+    }
+
+    #[test]
+    fn try_add_crack_rejects_exact_duplicate() {
+        let mut app = App::default();
+        app.project.defects.push(Defect::Crack(crate::core::Crack {
+            x: 10.0,
+            y: 20.0,
+            length: 5.0,
+            angle: 0.0,
+            amplitude: 1.0,
+        }));
+
+        app.try_add_crack(10.0, 20.0);
+
+        assert_eq!(
+            app.project.defects.len(),
+            1,
+            "exact duplicate crack should not be added"
+        );
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn try_add_crack_allows_overlapping_but_distinct_position() {
+        let mut app = App::default();
+        app.project.defects.push(Defect::Crack(crate::core::Crack {
+            x: 10.0,
+            y: 20.0,
+            length: 5.0,
+            angle: 0.0,
+            amplitude: 1.0,
+        }));
+
+        // Close enough to visually overlap, but not the same click.
+        app.try_add_crack(10.5, 20.5);
+
+        assert_eq!(app.project.defects.len(), 2, "overlap should be allowed");
+    }
+
+    #[test]
+    fn try_add_void_rejects_exact_duplicate() {
+        let mut app = App::default();
+        app.project.defects.push(Defect::Void(crate::core::Void {
+            x: 10.0,
+            y: 20.0,
+            radius: 2.0,
+            amplitude: 1.0,
+        }));
+
+        app.try_add_void(10.0, 20.0);
+
+        assert_eq!(
+            app.project.defects.len(),
+            1,
+            "exact duplicate void should not be added"
+        );
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn try_add_void_allows_overlapping_but_distinct_position() {
+        let mut app = App::default();
+        app.project.defects.push(Defect::Void(crate::core::Void {
+            x: 10.0,
+            y: 20.0,
+            radius: 2.0,
+            amplitude: 1.0,
+        }));
+
+        app.try_add_void(10.5, 20.5);
+
+        assert_eq!(app.project.defects.len(), 2, "overlap should be allowed");
+    }
+
+    #[test]
+    fn crack_and_void_identical_checks_do_not_cross_react() {
+        let mut app = App::default();
+        app.project.defects.push(Defect::Crack(crate::core::Crack {
+            x: 10.0,
+            y: 20.0,
+            length: 5.0,
+            angle: 0.0,
+            amplitude: 1.0,
+        }));
+
+        // A void at the exact same spot as an existing crack is a different
+        // type, so it isn't a duplicate.
+        app.try_add_void(10.0, 20.0);
+
+        assert_eq!(app.project.defects.len(), 2);
     }
 
     #[test]
