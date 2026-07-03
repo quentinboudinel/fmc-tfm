@@ -60,7 +60,12 @@ impl Canvas {
         scale_x.min(scale_y)
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, defects: &[Defect]) -> egui::Response {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        defects: &[Defect],
+        selected: Option<usize>,
+    ) -> egui::Response {
         let (response, painter) =
             ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = response.rect;
@@ -72,14 +77,33 @@ impl Canvas {
 
         self.draw_grid(&painter, rect);
         self.draw_material_boundary(&painter, rect);
-        self.draw_defects(&painter, rect, defects);
+        self.draw_defects(&painter, rect, defects, selected);
         self.draw_probe(&painter, rect);
 
         response
     }
 
-    fn draw_defects(&self, painter: &egui::Painter, rect: Rect, defects: &[Defect]) {
-        for defect in defects {
+    fn draw_defects(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        defects: &[Defect],
+        selected: Option<usize>,
+    ) {
+        for (i, defect) in defects.iter().enumerate() {
+            let is_selected = selected == Some(i);
+
+            if is_selected {
+                let (x, y) = defect.position();
+                let center = self.world_to_screen(Pos2::new(x as f32, y as f32), rect);
+                let selection_radius = 8.0 * self.zoom;
+                painter.circle_stroke(
+                    center,
+                    selection_radius,
+                    Stroke::new(2.0, Color32::from_rgb(100, 200, 255)),
+                );
+            }
+
             match defect {
                 Defect::PointReflector(p) => {
                     self.draw_point_reflector(painter, rect, p.x as f32, p.y as f32);

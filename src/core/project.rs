@@ -2,21 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use super::{Defect, Material, Probe};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Project {
     pub material: Material,
     pub probe: Probe,
     pub defects: Vec<Defect>,
-}
-
-impl Default for Project {
-    fn default() -> Self {
-        Self {
-            material: Material::default(),
-            probe: Probe::default(),
-            defects: Vec::new(),
-        }
-    }
 }
 
 #[cfg(test)]
