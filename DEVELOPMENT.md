@@ -30,7 +30,11 @@ This project uses [release-plz](https://release-plz.dev/) for automated versioni
 - **GitHub releases**: Created automatically with git tags
 
 Configuration:
-- `.github/workflows/release-plz.yml` — CI workflow (runs in `rust:slim` container)
+- `.github/workflows/release-plz.yml` — CI workflow (runs in `rust:slim` container). The `rust:slim`
+  image ships neither the GitHub CLI nor `jq`, both of which `release-plz/action`'s internal
+  git-config step shells out to for commit-author identity — every run failed with
+  `gh: command not found` until the workflow installed them explicitly (see the "Install git,
+  GitHub CLI, and jq" step).
 - `release-plz.toml` — Release and changelog settings
 
 ## Development Phases
