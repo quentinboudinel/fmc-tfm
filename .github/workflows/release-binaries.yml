@@ -1,0 +1,78 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach binaries to (for manual re-runs)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      # eframe/egui's default (glow/winit) backend links against the X11 and
+      # Wayland client libraries on Linux; ubuntu-latest doesn't ship the -dev
+      # headers pkg-config needs to find them at build time.
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev \
+            libxi-dev libxrandr-dev libxinerama-dev libgl1-mesa-dev pkg-config
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          staging="fmc-tfm-${TAG}-${{ matrix.target }}"
+          mkdir "$staging"
+          cp "target/${{ matrix.target }}/release/fmc-tfm" "$staging/"
+          cp README.md LICENSE "$staging/"
+          tar -czf "${staging}.tar.gz" "$staging"
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $staging = "fmc-tfm-${env:TAG}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/fmc-tfm.exe" $staging/
+          Copy-Item README.md,LICENSE $staging/
+          Compress-Archive -Path $staging -DestinationPath "$staging.zip"
+
+      - name: Upload release asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "$TAG" fmc-tfm-"$TAG"-${{ matrix.target }}.${{ matrix.archive }} --repo "${{ github.repository }}" --clobber

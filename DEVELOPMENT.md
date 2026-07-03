@@ -28,6 +28,7 @@ This project uses [release-plz](https://release-plz.dev/) for automated versioni
 - **Version bumps**: `feat:` → minor, `fix:` → patch, `BREAKING CHANGE` → major
 - **Changelog**: Auto-generated from commit messages
 - **GitHub releases**: Created automatically with git tags
+- **Release binaries**: Built and attached automatically for Linux/Windows/macOS (see below)
 
 Configuration:
 - `.github/workflows/release-plz.yml` — CI workflow (runs in `rust:slim` container). The `rust:slim`
@@ -35,7 +36,15 @@ Configuration:
   git-config step shells out to for commit-author identity — every run failed with
   `gh: command not found` until the workflow installed them explicitly (see the "Install git,
   GitHub CLI, and jq" step).
-- `release-plz.toml` — Release and changelog settings
+- `release-plz.toml` — Release and changelog settings. `publish = false` because fmc-tfm is a GUI
+  desktop app, not a library meant for crates.io — there's no `CARGO_REGISTRY_TOKEN` to give it.
+- `.github/workflows/release-binaries.yml` — triggers on `release: published` (fired automatically
+  when release-plz creates a GitHub Release) and builds/uploads an archive per platform:
+  `x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc` (native `windows-latest` runner, not the
+  local mingw cross-compile setup below — real Windows/macOS runners are simpler and match
+  SPECIFICATION.md's actual target list), and `x86_64-apple-darwin`. Also accepts
+  `workflow_dispatch` with a `tag` input, for re-running against an existing release manually.
+  Each archive bundles the binary with `README.md` and `LICENSE`.
 
 ## Development Phases
 

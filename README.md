@@ -57,11 +57,19 @@ These techniques are used in aerospace, nuclear, oil & gas, and other industries
 
 ## Installation
 
-### Prerequisites
+### Prebuilt binaries
+
+Each [GitHub Release](https://github.com/quentinboudinel/fmc-tfm/releases) includes prebuilt
+binaries for Linux, Windows, and macOS (x86_64) — download the archive for your platform,
+extract it, and run the `fmc-tfm` (or `fmc-tfm.exe`) binary directly; no Rust toolchain needed.
+
+### Build from source
+
+#### Prerequisites
 
 - [Rust](https://rustup.rs/) 1.70.0 or later
 
-### Build
+#### Build
 
 ```bash
 git clone https://github.com/yourusername/fmc-tfm.git
@@ -69,7 +77,7 @@ cd fmc-tfm
 cargo build --release
 ```
 
-### Run
+#### Run
 
 ```bash
 cargo run --release
