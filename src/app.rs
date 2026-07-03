@@ -252,112 +252,11 @@ impl eframe::App for App {
         egui::SidePanel::right("control_panel")
             .default_width(300.0)
             .show(ctx, |ui| {
-                ui.heading("FMC-TFM");
-                ui.separator();
-
-                egui::CollapsingHeader::new("File")
-                    .default_open(true)
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.button("Save Project").clicked() {
-                                self.save_project_dialog();
-                            }
-                            if ui.button("Open Project").clicked() {
-                                self.open_project_dialog();
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            if ui.button("Export FMC").clicked() {
-                                self.export_fmc_dialog();
-                            }
-                            if ui.button("Import FMC").clicked() {
-                                self.import_fmc_dialog();
-                            }
-                        });
-                        if let Some(fmc) = &self.imported_fmc {
-                            let metadata = fmc.metadata.clone();
-                            let mut reconstruct_clicked = false;
-                            ui.group(|ui| {
-                                ui.label("Imported FMC metadata:");
-                                ui.label(format!("Elements: {}", metadata.num_elements));
-                                ui.label(format!("Pitch: {:.2} mm", metadata.pitch_mm));
-                                ui.label(format!(
-                                    "Frequency: {:.1} MHz",
-                                    metadata.center_frequency_mhz
-                                ));
-                                ui.label(format!(
-                                    "Sample rate: {:.1} MHz, {} samples",
-                                    metadata.sample_rate_mhz, metadata.num_samples
-                                ));
-                                ui.label(format!(
-                                    "Material: {:.0} m/s, {:.0}x{:.0} mm",
-                                    metadata.material_velocity_mps,
-                                    metadata.material_width_mm,
-                                    metadata.material_depth_mm
-                                ));
-                                if ui.button("Reconstruct").clicked() {
-                                    reconstruct_clicked = true;
-                                }
-                            });
-                            if reconstruct_clicked {
-                                self.reconstruct_imported_fmc();
-                            }
-                        }
+                        self.show_control_panel_contents(ui);
                     });
-
-                egui::CollapsingHeader::new("Material")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        self.show_material_controls(ui);
-                    });
-
-                egui::CollapsingHeader::new("Probe")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        self.show_probe_controls(ui);
-                    });
-
-                egui::CollapsingHeader::new("Tools")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        self.show_tool_buttons(ui);
-                    });
-
-                egui::CollapsingHeader::new("Defects")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        self.show_defect_list(ui);
-                    });
-
-                egui::CollapsingHeader::new("Reconstruction")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.button("Simulate").clicked() {
-                                self.run_simulation();
-                            }
-                            if ui.button("Export PNG").clicked() {
-                                self.export_png_dialog();
-                            }
-                        });
-                        self.heatmap.show_controls(ui);
-                    });
-
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Undo:");
-                    ui.add_enabled(self.history.can_undo(), egui::Button::new("⟲"))
-                        .clicked()
-                        .then(|| self.history.undo(&mut self.project));
-                    ui.add_enabled(self.history.can_redo(), egui::Button::new("⟳"))
-                        .clicked()
-                        .then(|| self.history.redo(&mut self.project));
-                });
-
-                if let Some(message) = &self.status_message {
-                    ui.separator();
-                    ui.label(message);
-                }
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -376,6 +275,117 @@ impl eframe::App for App {
                 );
             });
         });
+    }
+}
+
+impl App {
+    fn show_control_panel_contents(&mut self, ui: &mut egui::Ui) {
+        ui.heading("FMC-TFM");
+        ui.separator();
+
+        egui::CollapsingHeader::new("File")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Save Project").clicked() {
+                        self.save_project_dialog();
+                    }
+                    if ui.button("Open Project").clicked() {
+                        self.open_project_dialog();
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("Export FMC").clicked() {
+                        self.export_fmc_dialog();
+                    }
+                    if ui.button("Import FMC").clicked() {
+                        self.import_fmc_dialog();
+                    }
+                });
+                if let Some(fmc) = &self.imported_fmc {
+                    let metadata = fmc.metadata.clone();
+                    let mut reconstruct_clicked = false;
+                    ui.group(|ui| {
+                        ui.label("Imported FMC metadata:");
+                        ui.label(format!("Elements: {}", metadata.num_elements));
+                        ui.label(format!("Pitch: {:.2} mm", metadata.pitch_mm));
+                        ui.label(format!(
+                            "Frequency: {:.1} MHz",
+                            metadata.center_frequency_mhz
+                        ));
+                        ui.label(format!(
+                            "Sample rate: {:.1} MHz, {} samples",
+                            metadata.sample_rate_mhz, metadata.num_samples
+                        ));
+                        ui.label(format!(
+                            "Material: {:.0} m/s, {:.0}x{:.0} mm",
+                            metadata.material_velocity_mps,
+                            metadata.material_width_mm,
+                            metadata.material_depth_mm
+                        ));
+                        if ui.button("Reconstruct").clicked() {
+                            reconstruct_clicked = true;
+                        }
+                    });
+                    if reconstruct_clicked {
+                        self.reconstruct_imported_fmc();
+                    }
+                }
+            });
+
+        egui::CollapsingHeader::new("Material")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.show_material_controls(ui);
+            });
+
+        egui::CollapsingHeader::new("Probe")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.show_probe_controls(ui);
+            });
+
+        egui::CollapsingHeader::new("Tools")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.show_tool_buttons(ui);
+            });
+
+        egui::CollapsingHeader::new("Defects")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.show_defect_list(ui);
+            });
+
+        egui::CollapsingHeader::new("Reconstruction")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Simulate").clicked() {
+                        self.run_simulation();
+                    }
+                    if ui.button("Export PNG").clicked() {
+                        self.export_png_dialog();
+                    }
+                });
+                self.heatmap.show_controls(ui);
+            });
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Undo:");
+            ui.add_enabled(self.history.can_undo(), egui::Button::new("⟲"))
+                .clicked()
+                .then(|| self.history.undo(&mut self.project));
+            ui.add_enabled(self.history.can_redo(), egui::Button::new("⟳"))
+                .clicked()
+                .then(|| self.history.redo(&mut self.project));
+        });
+
+        if let Some(message) = &self.status_message {
+            ui.separator();
+            ui.label(message);
+        }
     }
 }
 
