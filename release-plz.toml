@@ -2,6 +2,11 @@
 changelog_update = true
 git_tag_enable = true
 git_release_enable = true
+# fmc-tfm is a GUI desktop app, not a library meant for crates.io. CI still
+# tags releases and publishes GitHub Releases with changelogs; it just
+# doesn't run `cargo publish` (which would otherwise fail every run without
+# a CARGO_REGISTRY_TOKEN secret).
+publish = false
 
 [changelog]
 body = """
