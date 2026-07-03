@@ -29,7 +29,7 @@ impl TfmReconstructor {
             element_width_mm: meta.element_width_mm,
             center_frequency_mhz: meta.center_frequency_mhz,
         };
-        let element_positions = probe.element_positions();
+        let element_positions = probe.absolute_element_positions(meta.material_width_mm);
         let num_elements = meta.num_elements;
         let num_samples = meta.num_samples;
         let num_pixels = grid.res_x * grid.res_z;

@@ -32,13 +32,15 @@ impl TfmGrid {
         }
     }
 
-    /// World-space (x, z) coordinate of a pixel's center; x centered on 0,
-    /// z measured down from the probe surface, matching the defect/probe
-    /// coordinate convention used by the simulator.
+    /// World-space (x, z) coordinate of a pixel's center. x spans `[0,
+    /// width_mm]` and z spans `[0, depth_mm]` measured down from the probe
+    /// surface, matching the defect/material coordinate convention used by
+    /// the canvas (material spans `[0, width]`, defects are placed in that
+    /// same frame) and by the simulator.
     pub fn pixel_center(&self, ix: usize, iz: usize) -> (f64, f64) {
         let dx = self.width_mm / self.res_x as f64;
         let dz = self.depth_mm / self.res_z as f64;
-        let x = -self.width_mm / 2.0 + (ix as f64 + 0.5) * dx;
+        let x = (ix as f64 + 0.5) * dx;
         let z = (iz as f64 + 0.5) * dz;
         (x, z)
     }
@@ -109,11 +111,11 @@ mod tests {
     fn pixel_center_of_first_and_last_pixel() {
         let grid = TfmGrid::new(100.0, 50.0, 10, 5);
         let (x0, z0) = grid.pixel_center(0, 0);
-        assert!((x0 - (-45.0)).abs() < 1e-9);
+        assert!((x0 - 5.0).abs() < 1e-9);
         assert!((z0 - 5.0).abs() < 1e-9);
 
         let (x9, z4) = grid.pixel_center(9, 4);
-        assert!((x9 - 45.0).abs() < 1e-9);
+        assert!((x9 - 95.0).abs() < 1e-9);
         assert!((z4 - 45.0).abs() < 1e-9);
     }
 

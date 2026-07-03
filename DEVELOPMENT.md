@@ -54,6 +54,16 @@ attribute variant — only the `fmc_data` dataset itself is stored as `float32`,
 ### Phase 4: TFM Reconstruction
 Implement the Total Focusing Method algorithm with real-time performance and heatmap visualization.
 
+**Coordinate convention:** material/defects/`TfmGrid` all use x in `[0, material.width_mm]` and
+z (depth) in `[0, material.depth_mm]`, matching how `Canvas` draws and places them — material's
+top-left corner is the origin. `Probe::element_positions()` itself is centered on 0 (its own
+local frame), so anything placing a probe into the material frame (`FmcSimulator`,
+`TfmReconstructor`) must go through `Probe::absolute_element_positions(material_width_mm)`,
+which shifts by `+material_width_mm / 2.0` per SPECIFICATION.md 5.3.2 ("centered horizontally").
+Forgetting that shift was a real bug caught by visually comparing a placed defect against its
+heatmap reconstruction — the two need to overlay at the same normalized position within their
+respective panels.
+
 `TfmReconstructor` (`src/core/reconstructor.rs`) parallelizes with `rayon`, precomputes a
 per-element distance lookup table (avoiding a sqrt per tx/rx pair), loops tx/rx-outermost so
 each A-scan is read from the FMC array exactly once instead of once per pixel, and uses a

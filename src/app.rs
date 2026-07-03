@@ -1,8 +1,8 @@
 use crate::core::{
-    AddDefect, CommandHistory, Defect, MaterialPreset, MoveDefect, PointReflector, Project,
-    RemoveDefect,
+    AddDefect, CommandHistory, Defect, FmcSimulator, MaterialPreset, MoveDefect, PointReflector,
+    Project, RemoveDefect, TfmGrid, TfmImage, TfmReconstructor,
 };
-use crate::ui::Canvas;
+use crate::ui::{Canvas, Heatmap};
 use eframe::egui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -20,6 +20,11 @@ pub struct App {
     pub history: CommandHistory,
     pub tool_mode: ToolMode,
     pub selected_defect: Option<usize>,
+    pub heatmap: Heatmap,
+    pub tfm_image: Option<TfmImage>,
+    /// Bumped every time `tfm_image` is replaced, so `Heatmap` knows when it
+    /// must rebuild its cached texture instead of reusing the last one.
+    pub tfm_generation: u64,
     drag_start_pos: Option<(f64, f64)>,
 }
 
@@ -36,6 +41,9 @@ impl Default for App {
             history: CommandHistory::default(),
             tool_mode: ToolMode::Select,
             selected_defect: None,
+            heatmap: Heatmap::default(),
+            tfm_image: None,
+            tfm_generation: 0,
             drag_start_pos: None,
         }
     }
@@ -80,6 +88,20 @@ impl App {
         }
         None
     }
+
+    /// Runs the FMC simulation over the current project, then reconstructs a
+    /// TFM image over the material's full extent at the default resolution.
+    fn run_simulation(&mut self) {
+        let simulator = FmcSimulator::default();
+        let fmc = simulator.simulate(
+            &self.project.material,
+            &self.project.probe,
+            &self.project.defects,
+        );
+        let grid = TfmGrid::from_fmc(&fmc);
+        self.tfm_image = Some(TfmReconstructor::reconstruct(&fmc, grid));
+        self.tfm_generation += 1;
+    }
 }
 
 impl eframe::App for App {
@@ -116,6 +138,15 @@ impl eframe::App for App {
                         self.show_defect_list(ui);
                     });
 
+                egui::CollapsingHeader::new("Reconstruction")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if ui.button("Simulate").clicked() {
+                            self.run_simulation();
+                        }
+                        self.heatmap.show_controls(ui);
+                    });
+
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Undo:");
@@ -129,10 +160,18 @@ impl eframe::App for App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let response = self
-                .canvas
-                .show(ui, &self.project.defects, self.selected_defect);
-            self.handle_canvas_interaction(&response);
+            ui.columns(2, |columns| {
+                let response =
+                    self.canvas
+                        .show(&mut columns[0], &self.project.defects, self.selected_defect);
+                self.handle_canvas_interaction(&response);
+
+                self.heatmap.show_image(
+                    &mut columns[1],
+                    self.tfm_image.as_ref(),
+                    self.tfm_generation,
+                );
+            });
         });
     }
 }
@@ -363,5 +402,42 @@ mod tests {
         assert_eq!(app.defect_at_position(10.0, 20.0, 3.0), Some(0));
         assert_eq!(app.defect_at_position(11.0, 20.0, 3.0), Some(0));
         assert_eq!(app.defect_at_position(50.0, 50.0, 3.0), None);
+    }
+
+    #[test]
+    fn app_starts_with_no_reconstruction() {
+        let app = App::default();
+        assert!(app.tfm_image.is_none());
+        assert_eq!(app.tfm_generation, 0);
+    }
+
+    #[test]
+    fn run_simulation_populates_tfm_image_and_bumps_generation() {
+        let mut app = App::default();
+        // Keep this small: the default 64-element/300x300 case is a
+        // multi-hundred-ms release-mode operation and much slower in debug.
+        app.project.probe.num_elements = 4;
+        app.project.material.width_mm = 20.0;
+        app.project.material.depth_mm = 20.0;
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 0.0,
+                y: 10.0,
+                amplitude: 1.0,
+            }));
+
+        app.run_simulation();
+
+        let image = app
+            .tfm_image
+            .as_ref()
+            .expect("reconstruction should be set");
+        assert_eq!(image.grid.width_mm, 20.0);
+        assert_eq!(image.grid.depth_mm, 20.0);
+        assert_eq!(app.tfm_generation, 1);
+
+        app.run_simulation();
+        assert_eq!(app.tfm_generation, 2);
     }
 }

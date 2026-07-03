@@ -21,7 +21,7 @@ impl Default for FmcSimulator {
 
 impl FmcSimulator {
     pub fn simulate(&self, material: &Material, probe: &Probe, defects: &[Defect]) -> FmcData {
-        let element_positions = probe.element_positions();
+        let element_positions = probe.absolute_element_positions(material.width_mm);
         let num_elements = probe.num_elements;
         let num_samples = self.required_samples(material, probe);
 
@@ -78,10 +78,10 @@ impl FmcSimulator {
     /// Sizes the time axis so the latest possible echo (round trip to the far
     /// bottom corners of the material, plus the pulse's own tail) still fits.
     fn required_samples(&self, material: &Material, probe: &Probe) -> usize {
-        let element_positions = probe.element_positions();
+        let element_positions = probe.absolute_element_positions(material.width_mm);
         let corners = [
-            (-material.width_mm / 2.0, material.depth_mm),
-            (material.width_mm / 2.0, material.depth_mm),
+            (0.0, material.depth_mm),
+            (material.width_mm, material.depth_mm),
         ];
         let max_r = element_positions
             .iter()
@@ -176,7 +176,9 @@ mod tests {
         let material = Material::new(5000.0, 100.0, 50.0);
         let probe = single_element_probe();
         let sim = FmcSimulator::default();
-        let defects = [point_defect(0.0, 20.0, 1.0)];
+        // The single element sits at the material's horizontal center (x=50);
+        // placing the defect there keeps the round-trip distance a simple 2x20mm.
+        let defects = [point_defect(50.0, 20.0, 1.0)];
         let fmc = sim.simulate(&material, &probe, &defects);
 
         // round trip = 40mm at 5000 m/s => 8.0us => sample 800 at 100 MHz
@@ -193,8 +195,8 @@ mod tests {
         let probe = single_element_probe();
         let sim = FmcSimulator::default();
 
-        let near = sim.simulate(&material, &probe, &[point_defect(0.0, 10.0, 1.0)]);
-        let far = sim.simulate(&material, &probe, &[point_defect(0.0, 40.0, 1.0)]);
+        let near = sim.simulate(&material, &probe, &[point_defect(50.0, 10.0, 1.0)]);
+        let far = sim.simulate(&material, &probe, &[point_defect(50.0, 40.0, 1.0)]);
 
         let near_peak = near.ascan(0, 0).iter().cloned().fold(0.0_f32, f32::max);
         let far_peak = far.ascan(0, 0).iter().cloned().fold(0.0_f32, f32::max);
@@ -207,7 +209,7 @@ mod tests {
         let material = Material::new(5000.0, 100.0, 50.0);
         let probe = single_element_probe();
         let sim = FmcSimulator::default();
-        let defects = [point_defect(0.0, 10.0, 1.0), point_defect(0.0, 40.0, 1.0)];
+        let defects = [point_defect(50.0, 10.0, 1.0), point_defect(50.0, 40.0, 1.0)];
         let fmc = sim.simulate(&material, &probe, &defects);
         let ascan = fmc.ascan(0, 0);
 

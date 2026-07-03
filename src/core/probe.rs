@@ -31,6 +31,16 @@ impl Probe {
     pub fn total_width(&self) -> f64 {
         self.num_elements as f64 * self.pitch_mm
     }
+
+    /// Element positions in the material's `[0, material_width_mm]` frame
+    /// (the same frame defects/canvas use), per SPECIFICATION.md 5.3.2: the
+    /// probe is centered horizontally on the material's top surface.
+    pub fn absolute_element_positions(&self, material_width_mm: f64) -> Vec<f64> {
+        self.element_positions()
+            .into_iter()
+            .map(|x| x + material_width_mm / 2.0)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -76,6 +86,26 @@ mod tests {
         let probe = Probe::default();
         let expected = 64.0 * 0.5;
         assert!((probe.total_width() - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn absolute_element_positions_centered_within_material() {
+        let probe = Probe {
+            num_elements: 4,
+            pitch_mm: 1.0,
+            element_width_mm: 0.8,
+            center_frequency_mhz: 5.0,
+        };
+        // total_width = 4mm, centered within a 100mm-wide material -> spans [48, 52]
+        let positions = probe.absolute_element_positions(100.0);
+        assert_eq!(positions.len(), 4);
+        assert!((positions[0] - 48.5).abs() < 1e-9);
+        assert!((positions[3] - 51.5).abs() < 1e-9);
+        let sum: f64 = positions.iter().sum();
+        assert!(
+            (sum / 4.0 - 50.0).abs() < 1e-9,
+            "should center on material_width/2"
+        );
     }
 
     #[test]
