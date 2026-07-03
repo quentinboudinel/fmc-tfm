@@ -104,6 +104,29 @@ Add comparison view, file operations, image export, and documentation.
 cargo run --release
 ```
 
+### Cross-compiling for Windows
+
+`.cargo/config.toml` sets up the `x86_64-pc-windows-gnu` target to link with MinGW and statically
+link the C/C++ runtime (`target-feature=+crt-static`), so the resulting `.exe` doesn't need
+`libgcc`/`libstdc++`/`libwinpthread` DLLs alongside it. One-time setup on a Debian/Ubuntu-like
+host:
+
+```bash
+rustup target add x86_64-pc-windows-gnu
+sudo apt-get install -y mingw-w64
+```
+
+Then:
+
+```bash
+cargo build --release --target x86_64-pc-windows-gnu
+# -> target/x86_64-pc-windows-gnu/release/fmc-tfm.exe
+```
+
+This has been verified to *build* cleanly (including the Windows-specific backends for `rfd`,
+`arboard`, and `accesskit`), but not run-tested on real Windows/Wine — smoke-test the `.exe`
+before distributing it.
+
 ## Testing
 
 Rust's native test framework with `cargo test`. For TDD, use `cargo-watch` to auto-run tests on save:
