@@ -130,25 +130,14 @@ impl Canvas {
         painter.circle_filled(center, DEFECT_POINT_RADIUS * self.zoom, color);
     }
 
-    fn draw_crack(
-        &self,
-        painter: &egui::Painter,
-        rect: Rect,
-        crack: &crate::core::Crack,
-    ) {
+    fn draw_crack(&self, painter: &egui::Painter, rect: Rect, crack: &crate::core::Crack) {
         let half_len = crack.length as f32 / 2.0;
         let angle = crack.angle as f32;
         let dx = half_len * angle.cos();
         let dy = half_len * angle.sin();
 
-        let p1 = self.world_to_screen(
-            Pos2::new(crack.x as f32 - dx, crack.y as f32 - dy),
-            rect,
-        );
-        let p2 = self.world_to_screen(
-            Pos2::new(crack.x as f32 + dx, crack.y as f32 + dy),
-            rect,
-        );
+        let p1 = self.world_to_screen(Pos2::new(crack.x as f32 - dx, crack.y as f32 - dy), rect);
+        let p2 = self.world_to_screen(Pos2::new(crack.x as f32 + dx, crack.y as f32 + dy), rect);
 
         let color = Color32::from_rgb(255, 50, 50);
         painter.line_segment([p1, p2], Stroke::new(2.0 * self.zoom, color));
@@ -164,16 +153,8 @@ impl Canvas {
         painter.circle(center, screen_radius, fill, stroke);
     }
 
-    fn draw_porosity(
-        &self,
-        painter: &egui::Painter,
-        rect: Rect,
-        porosity: &crate::core::Porosity,
-    ) {
-        let center = self.world_to_screen(
-            Pos2::new(porosity.x as f32, porosity.y as f32),
-            rect,
-        );
+    fn draw_porosity(&self, painter: &egui::Painter, rect: Rect, porosity: &crate::core::Porosity) {
+        let center = self.world_to_screen(Pos2::new(porosity.x as f32, porosity.y as f32), rect);
         let scale = self.pixels_per_mm(rect) * self.zoom;
         let screen_radius = porosity.radius as f32 * scale;
 
@@ -201,14 +182,8 @@ impl Canvas {
         let dx = half_width * angle.cos();
         let dy = half_width * angle.sin();
 
-        let p1 = self.world_to_screen(
-            Pos2::new(planar.x as f32 - dx, planar.y as f32 - dy),
-            rect,
-        );
-        let p2 = self.world_to_screen(
-            Pos2::new(planar.x as f32 + dx, planar.y as f32 + dy),
-            rect,
-        );
+        let p1 = self.world_to_screen(Pos2::new(planar.x as f32 - dx, planar.y as f32 - dy), rect);
+        let p2 = self.world_to_screen(Pos2::new(planar.x as f32 + dx, planar.y as f32 + dy), rect);
 
         let color = Color32::from_rgb(200, 50, 200);
         painter.line_segment([p1, p2], Stroke::new(3.0 * self.zoom, color));

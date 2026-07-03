@@ -129,7 +129,9 @@ impl eframe::App for App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let response = self.canvas.show(ui, &self.project.defects, self.selected_defect);
+            let response = self
+                .canvas
+                .show(ui, &self.project.defects, self.selected_defect);
             self.handle_canvas_interaction(&response);
         });
     }
@@ -151,7 +153,11 @@ impl App {
                     MaterialPreset::Acrylic,
                 ] {
                     if ui
-                        .selectable_value(&mut preset_changed, current_preset != preset, format!("{:?}", preset))
+                        .selectable_value(
+                            &mut preset_changed,
+                            current_preset != preset,
+                            format!("{:?}", preset),
+                        )
                         .clicked()
                     {
                         self.project.material = crate::core::Material::from_preset(
@@ -191,7 +197,10 @@ impl App {
         });
         ui.horizontal(|ui| {
             ui.label("Frequency:");
-            ui.label(format!("{:.1} MHz", self.project.probe.center_frequency_mhz));
+            ui.label(format!(
+                "{:.1} MHz",
+                self.project.probe.center_frequency_mhz
+            ));
         });
     }
 
@@ -289,7 +298,8 @@ impl App {
             if response.drag_started_by(egui::PointerButton::Primary) {
                 if let Some(pos) = response.interact_pointer_pos() {
                     let world = self.canvas.screen_to_world(pos, rect);
-                    if let Some(idx) = self.defect_at_position(world.x as f64, world.y as f64, 3.0) {
+                    if let Some(idx) = self.defect_at_position(world.x as f64, world.y as f64, 3.0)
+                    {
                         self.selected_defect = Some(idx);
                         self.drag_start_pos = Some(self.project.defects[idx].position());
                     }
@@ -342,11 +352,13 @@ mod tests {
     #[test]
     fn defect_at_position_finds_nearby() {
         let mut app = App::default();
-        app.project.defects.push(Defect::PointReflector(PointReflector {
-            x: 10.0,
-            y: 20.0,
-            amplitude: 1.0,
-        }));
+        app.project
+            .defects
+            .push(Defect::PointReflector(PointReflector {
+                x: 10.0,
+                y: 20.0,
+                amplitude: 1.0,
+            }));
 
         assert_eq!(app.defect_at_position(10.0, 20.0, 3.0), Some(0));
         assert_eq!(app.defect_at_position(11.0, 20.0, 3.0), Some(0));

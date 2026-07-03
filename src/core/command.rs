@@ -202,7 +202,10 @@ mod tests {
         assert!(!history.can_undo());
         assert!(!history.can_redo());
 
-        history.execute(Box::new(AddDefect::new(make_point(10.0, 20.0))), &mut project);
+        history.execute(
+            Box::new(AddDefect::new(make_point(10.0, 20.0))),
+            &mut project,
+        );
         assert_eq!(project.defects.len(), 1);
         assert!(history.can_undo());
         assert!(!history.can_redo());
@@ -223,11 +226,17 @@ mod tests {
         let mut project = Project::default();
         let mut history = CommandHistory::new();
 
-        history.execute(Box::new(AddDefect::new(make_point(10.0, 20.0))), &mut project);
+        history.execute(
+            Box::new(AddDefect::new(make_point(10.0, 20.0))),
+            &mut project,
+        );
         history.undo(&mut project);
         assert!(history.can_redo());
 
-        history.execute(Box::new(AddDefect::new(make_point(30.0, 40.0))), &mut project);
+        history.execute(
+            Box::new(AddDefect::new(make_point(30.0, 40.0))),
+            &mut project,
+        );
         assert!(!history.can_redo());
     }
 
