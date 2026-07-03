@@ -1,9 +1,21 @@
+use crate::core::Project;
 use crate::ui::Canvas;
 use eframe::egui;
 
-#[derive(Default)]
 pub struct App {
     pub canvas: Canvas,
+    pub project: Project,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        let project = Project::default();
+        let canvas = Canvas::new(
+            project.material.width_mm as f32,
+            project.material.depth_mm as f32,
+        );
+        Self { canvas, project }
+    }
 }
 
 impl eframe::App for App {
@@ -23,7 +35,7 @@ impl eframe::App for App {
                 });
 
                 ui.collapsing("Defects", |ui| {
-                    ui.label("Defect list placeholder");
+                    ui.label(format!("{} defects", self.project.defects.len()));
                 });
 
                 ui.collapsing("Simulation", |ui| {
@@ -32,7 +44,7 @@ impl eframe::App for App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.canvas.show(ui);
+            self.canvas.show(ui, &self.project.defects);
         });
     }
 }
@@ -42,9 +54,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn app_has_canvas() {
+    fn app_has_canvas_and_project() {
         let app = App::default();
-        assert_eq!(app.canvas.width_mm, 100.0);
-        assert_eq!(app.canvas.depth_mm, 50.0);
+        assert_eq!(app.canvas.width_mm, app.project.material.width_mm as f32);
+        assert_eq!(app.canvas.depth_mm, app.project.material.depth_mm as f32);
+        assert!(app.project.defects.is_empty());
     }
 }
