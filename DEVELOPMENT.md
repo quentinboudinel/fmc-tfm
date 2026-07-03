@@ -54,6 +54,20 @@ attribute variant — only the `fmc_data` dataset itself is stored as `float32`,
 ### Phase 4: TFM Reconstruction
 Implement the Total Focusing Method algorithm with real-time performance and heatmap visualization.
 
+`TfmReconstructor` (`src/core/reconstructor.rs`) parallelizes with `rayon`, precomputes a
+per-element distance lookup table (avoiding a sqrt per tx/rx pair), loops tx/rx-outermost so
+each A-scan is read from the FMC array exactly once instead of once per pixel, and uses a
+branch-free interpolation kernel so the hot loop can auto-vectorize.
+
+**Known gap:** SPECIFICATION.md 8.1 targets <100ms for 64 elements at a 300x300 grid. On this
+project's dev hardware (10-core i9-13900H) the current CPU/rayon-only implementation measures
+~145-220ms — closer, but short of the target. The remaining gap is dominated by the FMC array
+(tens of MB, exceeds L3) and the per-element distance table both needing to be streamed through
+for every tx/rx pair; closing it fully would need either GPU compute (wgpu compute shader) or a
+proper 2D cache-blocked tiling of the pixel and tx/rx dimensions together, both larger efforts
+than implemented so far. The `#[ignore]`d `reconstruction_meets_performance_target` test in
+`reconstructor.rs` checks a looser regression-guard bound (<400ms) rather than the spec's <100ms.
+
 ### Phase 5: Polish
 Add comparison view, file operations, image export, and documentation.
 
